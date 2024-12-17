@@ -1,0 +1,1 @@
+export { scanDocument } from "./scanner";
