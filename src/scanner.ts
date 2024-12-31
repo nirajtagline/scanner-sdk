@@ -1,12 +1,23 @@
 import { exec } from "child_process";
+import * as fs from "fs"
+import * as os from 'os';
+import * as path from "path"; // This is the correct import syntax for 'path'
+
+// import path from "path";
+import { promisify } from "util";
+
+// Convert fs.unlink (to delete file) to a promise-based function
+const unlinkAsync = promisify(fs.unlink);
 
 // Function to scan the document using NAPS2
 export const scanDocument = (
-  outputFilePath: string,
   options: { format?: string; dpi?: number; scannerName?: string }
-): Promise<string> => {
+): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
     const { format = "pdf", dpi = 300, scannerName } = options;
+
+    // Generate a temporary file path in the system's temporary directory
+    const tempFilePath = path.join(os.tmpdir(), `scanned-document-${Date.now()}.pdf`);
 
     // Possible paths for the NAPS2 console executable
     const naps2Paths = [
@@ -22,17 +33,27 @@ export const scanDocument = (
       const currentPath = naps2Paths[i];
 
       // If the executable is found in one of the paths, run the command
-      command = `"${currentPath}" -o "${outputFilePath}" -f ${format} --dpi ${dpi}`;
+      command = `"${currentPath}" -o "${tempFilePath}" -f ${format} --dpi ${dpi}`;
 
       if (scannerName) {
         command += ` --scanner "${scannerName}"`;
       }
 
-      exec(command, (error, stdout, stderr) => {
+      exec(command, async (error, stdout, stderr) => {
         if (error) {
           reject(`Error: ${stderr || error.message}`);
         } else {
-          resolve(`Document scanned successfully: ${outputFilePath}`);
+          // Once scanning is successful, read the file and return it as a buffer
+          try {
+            const fileBuffer = fs.readFileSync(tempFilePath);
+
+            // Delete the temporary file after reading
+            await unlinkAsync(tempFilePath);
+
+            resolve(fileBuffer);
+          } catch (readError : any) {
+            reject(`Error reading temporary file: ${readError.message}`);
+          }
         }
       });
 
